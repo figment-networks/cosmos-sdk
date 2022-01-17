@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -381,6 +383,13 @@ func (app *BaseApp) snapshot(height int64) {
 		return
 	}
 
+	if os.Getenv("SNAPSHOT_EXPORT_ENABLED") == "1" {
+		app.logger.Info("exporting state snapshot", "height", height)
+		if err := exportSnapshot(app, snapshot); err != nil {
+			app.logger.Error("failed to export snapshot", "height", height, "err", err)
+		}
+	}
+
 	app.logger.Info("completed state snapshot", "height", height, "format", snapshot.Format)
 
 	if app.snapshotKeepRecent > 0 {
@@ -394,6 +403,45 @@ func (app *BaseApp) snapshot(height int64) {
 
 		app.logger.Debug("pruned state snapshots", "pruned", pruned)
 	}
+}
+
+func exportSnapshot(app *BaseApp, snapshot *snapshottypes.Snapshot) error {
+	snapshotsDir := os.Getenv("SNAPSHOT_EXPORT_DIR")
+	if snapshotsDir == "" {
+		return errors.New("SNAPSHOT_EXPORT_DIR env var is not set, not exporting the snapshot")
+	}
+
+	baseDir := fmt.Sprintf("%s/%d", snapshotsDir, snapshot.Height)
+	snapshotPath := fmt.Sprintf("%s/snapshot", snapshotsDir)
+	chunkPath := filepath.Join(baseDir, "%d.chunk")
+
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		return err
+	}
+
+	data, err := proto.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(snapshotPath, data, 0666); err != nil {
+		return err
+	}
+
+	for i := uint32(0); i < snapshot.Chunks; i++ {
+		app.logger.Info("exporting snapshot chunk", "height", snapshot.Height, "chunk", i)
+
+		chunkData, err := app.snapshotManager.LoadChunk(snapshot.Height, snapshot.Format, i)
+		if err != nil {
+			return err
+		}
+
+		if err := ioutil.WriteFile(fmt.Sprintf(chunkPath, i), chunkData, 0666); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Query implements the ABCI interface. It delegates to CommitMultiStore if it
