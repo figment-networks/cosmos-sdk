@@ -412,7 +412,7 @@ func exportSnapshot(app *BaseApp, snapshot *snapshottypes.Snapshot) error {
 	}
 
 	baseDir := fmt.Sprintf("%s/%d", snapshotsDir, snapshot.Height)
-	snapshotPath := fmt.Sprintf("%s/snapshot", snapshotsDir)
+	snapshotPath := fmt.Sprintf("%s/snapshot", baseDir)
 	chunkPath := filepath.Join(baseDir, "%d.chunk")
 
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
