@@ -419,7 +419,12 @@ func exportSnapshot(app *BaseApp, snapshot *snapshottypes.Snapshot) error {
 		return err
 	}
 
-	data, err := proto.Marshal(snapshot)
+	abciSnap, err := snapshot.ToABCI()
+	if err != nil {
+		return err
+	}
+
+	data, err := abciSnap.Marshal()
 	if err != nil {
 		return err
 	}
