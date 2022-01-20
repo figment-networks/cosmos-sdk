@@ -383,13 +383,6 @@ func (app *BaseApp) snapshot(height int64) {
 		return
 	}
 
-	if os.Getenv("SNAPSHOT_EXPORT_ENABLED") == "1" {
-		app.logger.Info("exporting state snapshot", "height", height)
-		if err := exportSnapshot(app, snapshot); err != nil {
-			app.logger.Error("failed to export snapshot", "height", height, "err", err)
-		}
-	}
-
 	app.logger.Info("completed state snapshot", "height", height, "format", snapshot.Format)
 
 	if app.snapshotKeepRecent > 0 {
@@ -403,9 +396,16 @@ func (app *BaseApp) snapshot(height int64) {
 
 		app.logger.Debug("pruned state snapshots", "pruned", pruned)
 	}
+
+	if os.Getenv("SNAPSHOT_EXPORT_ENABLED") == "1" {
+		app.logger.Info("exporting state snapshot", "height", height)
+		if err := app.ExportSnapshot(snapshot); err != nil {
+			app.logger.Error("failed to export snapshot", "height", height, "err", err)
+		}
+	}
 }
 
-func exportSnapshot(app *BaseApp, snapshot *snapshottypes.Snapshot) error {
+func (app *BaseApp) ExportSnapshot(snapshot *snapshottypes.Snapshot) error {
 	snapshotsDir := os.Getenv("SNAPSHOT_EXPORT_DIR")
 	if snapshotsDir == "" {
 		return errors.New("SNAPSHOT_EXPORT_DIR env var is not set, not exporting the snapshot")
