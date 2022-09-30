@@ -11,14 +11,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/server"
 	tcmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	tmservice "github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/p2p"
+	pvm "github.com/tendermint/tendermint/privval"
+	"github.com/tendermint/tendermint/proxy"
 	"github.com/tendermint/tendermint/rpc/client/local"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -27,7 +26,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	pruningtypes "github.com/cosmos/cosmos-sdk/pruning/types"
 	"github.com/cosmos/cosmos-sdk/server/api"
-	"github.com/cosmos/cosmos-sdk/server/config"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 	servergrpc "github.com/cosmos/cosmos-sdk/server/grpc"
 	"github.com/cosmos/cosmos-sdk/server/rosetta"
@@ -57,6 +55,8 @@ const (
 	FlagPruningInterval   = "pruning-interval"
 	FlagIndexEvents       = "index-events"
 	FlagMinRetainBlocks   = "min-retain-blocks"
+	FlagIAVLCacheSize     = "iavl-cache-size"
+	FlagIAVLFastNode      = "iavl-disable-fastnode"
 
 	// state sync-related flags
 	FlagStateSyncSnapshotInterval   = "state-sync.snapshot-interval"
@@ -209,7 +209,13 @@ func startStandAlone(ctx *Context, appCreator types.AppCreator) error {
 	}
 
 	app := appCreator(ctx.Logger, db, traceWriter, ctx.Viper)
-	_, err = startTelemetry(serverconfig.GetConfig(ctx.Viper))
+
+	config, err := serverconfig.GetConfig(ctx.Viper)
+	if err != nil {
+		return err
+	}
+
+	_, err = startTelemetry(config)
 	if err != nil {
 		return err
 	}
@@ -223,12 +229,14 @@ func startStandAlone(ctx *Context, appCreator types.AppCreator) error {
 
 	err = svr.Start()
 	if err != nil {
-		tmos.Exit(err.Error())
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 
 	defer func() {
 		if err = svr.Stop(); err != nil {
-			tmos.Exit(err.Error())
+			fmt.Println(err.Error())
+			os.Exit(1)
 		}
 	}()
 
@@ -272,29 +280,44 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 		return err
 	}
 
-	config := serverconfig.GetConfig(ctx.Viper)
+	config, err := serverconfig.GetConfig(ctx.Viper)
+	if err != nil {
+		return err
+	}
+
 	if err := config.ValidateBasic(); err != nil {
 		return err
 	}
 
 	app := appCreator(ctx.Logger, db, traceWriter, ctx.Viper)
 
-	genDoc, err := tmtypes.GenesisDocFromFile(cfg.GenesisFile())
+	nodeKey, err := p2p.LoadOrGenNodeKey(cfg.NodeKeyFile())
 	if err != nil {
 		return err
 	}
+	genDocProvider := node.DefaultGenesisDocProviderFunc(cfg)
 
 	var (
-		tmNode   tmservice.Service
+		tmNode   *node.Node
 		gRPCOnly = ctx.Viper.GetBool(flagGRPCOnly)
 	)
+
 	if gRPCOnly {
 		ctx.Logger.Info("starting node in gRPC only mode; Tendermint is disabled")
 		config.GRPC.Enable = true
 	} else {
 		ctx.Logger.Info("starting node with ABCI Tendermint in-process")
 
-		tmNode, err = node.New(cfg, ctx.Logger, abciclient.NewLocalCreator(app), genDoc)
+		tmNode, err = node.NewNode(
+			cfg,
+			pvm.LoadOrGenFilePV(cfg.PrivValidatorKeyFile(), cfg.PrivValidatorStateFile()),
+			nodeKey,
+			proxy.NewLocalClientCreator(app),
+			genDocProvider,
+			node.DefaultDBProvider,
+			node.DefaultMetricsProvider(cfg.Instrumentation),
+			ctx.Logger,
+		)
 		if err != nil {
 			return err
 		}
@@ -308,18 +331,7 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 	// service if API or gRPC is enabled, and avoid doing so in the general
 	// case, because it spawns a new local tendermint RPC client.
 	if (config.API.Enable || config.GRPC.Enable) && tmNode != nil {
-		node, ok := tmNode.(local.NodeService)
-		if !ok {
-			return fmt.Errorf("unable to set node type; please try re-installing the binary")
-		}
-
-		localNode, err := local.New(node)
-		if err != nil {
-			return err
-		}
-
-		clientCtx = clientCtx.WithClient(localNode)
-
+		clientCtx := clientCtx.WithClient(local.New(tmNode))
 		app.RegisterTxService(clientCtx)
 		app.RegisterTendermintService(clientCtx)
 	}
@@ -331,7 +343,7 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 
 	var apiSrv *api.Server
 	if config.API.Enable {
-		genDoc, err := tmtypes.GenesisDocFromFile(cfg.GenesisFile())
+		genDoc, err := genDocProvider()
 		if err != nil {
 			return err
 		}
@@ -405,13 +417,18 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 		if err != nil {
 			return err
 		}
-
+		defer grpcSrv.Stop()
 		if config.GRPCWeb.Enable {
 			grpcWebSrv, err = servergrpc.StartGRPCWeb(grpcSrv, config)
 			if err != nil {
 				ctx.Logger.Error("failed to start grpc-web http server: ", err)
 				return err
 			}
+			defer func() {
+				if err := grpcWebSrv.Close(); err != nil {
+					ctx.Logger.Error("failed to close grpc-web http server: ", err)
+				}
+			}()
 		}
 	}
 
@@ -474,7 +491,7 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 	}
 
 	defer func() {
-		if tmNode.IsRunning() {
+		if tmNode != nil && tmNode.IsRunning() {
 			_ = tmNode.Stop()
 		}
 
@@ -486,15 +503,6 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 			_ = apiSrv.Close()
 		}
 
-		if grpcSrv != nil {
-			grpcSrv.Stop()
-			if grpcWebSrv != nil {
-				if err := grpcWebSrv.Close(); err != nil {
-					ctx.Logger.Error("failed to close grpc-web http server: ", err)
-				}
-			}
-		}
-
 		ctx.Logger.Info("exiting...")
 	}()
 
@@ -502,7 +510,7 @@ func startInProcess(ctx *Context, clientCtx client.Context, appCreator types.App
 	return WaitForQuitSignals()
 }
 
-func startTelemetry(cfg config.Config) (*telemetry.Metrics, error) {
+func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 	if !cfg.Telemetry.Enabled {
 		return nil, nil
 	}

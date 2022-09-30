@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	gogotypes "github.com/gogo/protobuf/types"
+	"cosmossdk.io/math"
+	gogotypes "github.com/cosmos/gogoproto/types"
 	abci "github.com/tendermint/tendermint/abci/types"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -109,8 +110,8 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 	params := k.GetParams(ctx)
 	maxValidators := params.MaxValidators
 	powerReduction := k.PowerReduction(ctx)
-	totalPower := sdk.ZeroInt()
-	amtFromBondedToNotBonded, amtFromNotBondedToBonded := sdk.ZeroInt(), sdk.ZeroInt()
+	totalPower := math.ZeroInt()
+	amtFromBondedToNotBonded, amtFromNotBondedToBonded := math.ZeroInt(), math.ZeroInt()
 
 	// Retrieve the last validator set.
 	// The persistent set is updated later in this function.
@@ -250,7 +251,7 @@ func (k Keeper) unbondedToBonded(ctx sdk.Context, validator types.Validator) (ty
 // UnbondingToUnbonded switches a validator from unbonding state to unbonded state
 func (k Keeper) UnbondingToUnbonded(ctx sdk.Context, validator types.Validator) types.Validator {
 	if !validator.IsUnbonding() {
-		panic(fmt.Sprintf("bad state transition unbondingToBonded, validator: %v\n", validator))
+		panic(fmt.Sprintf("bad state transition unbondingToUnbonded, validator: %v\n", validator))
 	}
 
 	return k.completeUnbondingValidator(ctx, validator)
@@ -297,7 +298,10 @@ func (k Keeper) bondValidator(ctx sdk.Context, validator types.Validator) (types
 	if err != nil {
 		return validator, err
 	}
-	k.AfterValidatorBonded(ctx, consAddr, validator.GetOperator())
+
+	if err := k.Hooks().AfterValidatorBonded(ctx, consAddr, validator.GetOperator()); err != nil {
+		return validator, err
+	}
 
 	return validator, err
 }
@@ -332,7 +336,10 @@ func (k Keeper) beginUnbondingValidator(ctx sdk.Context, validator types.Validat
 	if err != nil {
 		return validator, err
 	}
-	k.AfterValidatorBeginUnbonding(ctx, consAddr, validator.GetOperator())
+
+	if err := k.Hooks().AfterValidatorBeginUnbonding(ctx, consAddr, validator.GetOperator()); err != nil {
+		return validator, err
+	}
 
 	return validator, nil
 }

@@ -6,8 +6,8 @@ package types
 import (
 	fmt "fmt"
 	types "github.com/cosmos/cosmos-sdk/codec/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -26,7 +26,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // GenesisState defines the auth module's genesis state.
 type GenesisState struct {
-	// params defines all the paramaters of the module.
+	// params defines all the parameters of the module.
 	Params Params `protobuf:"bytes,1,opt,name=params,proto3" json:"params"`
 	// accounts are the accounts present at genesis.
 	Accounts []*types.Any `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty"`

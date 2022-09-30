@@ -45,7 +45,7 @@ func GenerateIavlResult(size int, loc tmproofs.Where) (*IavlResult, error) {
 	if len(proof.Leaves) != 1 {
 		return nil, fmt.Errorf("GetWithProof returned %d leaves", len(proof.Leaves))
 	}
-	root := tree.WorkingHash()
+	root, _ := tree.WorkingHash()
 
 	res := &IavlResult{
 		Key:      key,
@@ -65,7 +65,7 @@ func GetKey(allkeys [][]byte, loc tmproofs.Where) []byte {
 		return allkeys[len(allkeys)-1]
 	}
 	// select a random index between 1 and allkeys-2
-	idx := rand.Int()%(len(allkeys)-2) + 1
+	idx := rand.NewRand().Int()%(len(allkeys)-2) + 1
 	return allkeys[idx]
 }
 
@@ -88,6 +88,9 @@ func GetNonKey(allkeys [][]byte, loc tmproofs.Where) []byte {
 // returns a list of all keys in sorted order
 func BuildTree(size int) (tree *iavl.MutableTree, keys [][]byte, err error) {
 	tree, err = iavl.NewMutableTree(db.NewMemDB(), 0)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// insert lots of info and store the bytes
 	keys = make([][]byte, size)

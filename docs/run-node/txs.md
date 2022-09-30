@@ -42,7 +42,7 @@ Signing a transaction using the CLI requires the unsigned transaction to be save
 simd tx sign unsigned_tx.json --chain-id my-test-chain --keyring-backend test --from $MY_VALIDATOR_ADDRESS
 ```
 
-This command will decode the unsigned transaction and sign it with `SIGN_MODE_DIRECT` with `$MY_VALIDATOR_ADDRESS`'s key, which we already set up in the keyring. The signed transaction will be output as JSON to the console, and, as above, we can save it to a file by appending `> signed_tx.json`.
+This command will decode the unsigned transaction and sign it with `SIGN_MODE_DIRECT` with `$MY_VALIDATOR_ADDRESS`'s key, which we already set up in the keyring. The signed transaction will be output as JSON to the console, and, as above, we can save it to a file by appending `--output-document signed_tx.json`.
 
 Some useful flags to consider in the `tx sign` command:
 
@@ -79,7 +79,6 @@ simd tx broadcast tx_signed.json
 
 You may optionally pass the `--broadcast-mode` flag to specify which response to receive from the node:
 
-* `block`: the CLI waits for the tx to be committed in a block.
 * `sync`: the CLI waits for a CheckTx execution response only.
 * `async`: the CLI returns immediately (transaction might fail).
 
@@ -121,12 +120,11 @@ import (
 )
 
 func sendTx() error {
-    // Choose your codec: Amino or Protobuf. Here, we use Protobuf, given by the
-    // following function.
-    encCfg := simapp.MakeTestEncodingConfig()
+    // Choose your codec: Amino or Protobuf. Here, we use Protobuf, given by the following function.
+    app := simapp.NewSimApp(...)
 
     // Create a new TxBuilder.
-    txBuilder := encCfg.TxConfig.NewTxBuilder()
+    txBuilder := app.TxConfig().NewTxBuilder()
 
     // --snip--
 }
@@ -144,7 +142,7 @@ priv2, _, addr2 := testdata.KeyTestPubAddr()
 priv3, _, addr3 := testdata.KeyTestPubAddr()
 ```
 
-Populating the `TxBuilder` can be done via its [methods](https://github.com/cosmos/cosmos-sdk/blob/v0.46.0-rc1/client/tx_config.go#L33-L50):
+Populating the `TxBuilder` can be done via its [methods](https://github.com/cosmos/cosmos-sdk/blob/v0.46.0/client/tx_config.go#L33-L50):
 
 ```go
 import (

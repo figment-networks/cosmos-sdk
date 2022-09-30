@@ -3,13 +3,11 @@ package testutil
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/cosmos/cosmos-sdk/testutil"
-	"github.com/cosmos/cosmos-sdk/testutil/rest"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 	v1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
+	"github.com/cosmos/gogoproto/proto"
 )
 
 func (s *IntegrationTestSuite) TestGetProposalGRPC() {
@@ -40,7 +38,7 @@ func (s *IntegrationTestSuite) TestGetProposalGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var proposal v1.QueryProposalResponse
@@ -161,7 +159,7 @@ func (s *IntegrationTestSuite) TestGetProposalVoteGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var vote v1.QueryVoteResponse
@@ -205,7 +203,7 @@ func (s *IntegrationTestSuite) TestGetProposalVotesGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var votes v1.QueryVotesResponse
@@ -254,7 +252,7 @@ func (s *IntegrationTestSuite) TestGetProposalDepositGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var deposit v1.QueryDepositResponse
@@ -293,7 +291,7 @@ func (s *IntegrationTestSuite) TestGetProposalDepositsGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var deposits v1.QueryDepositsResponse
@@ -338,7 +336,7 @@ func (s *IntegrationTestSuite) TestGetTallyGRPC() {
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			var tally v1.QueryTallyResultResponse
@@ -357,9 +355,10 @@ func (s *IntegrationTestSuite) TestGetTallyGRPC() {
 func (s *IntegrationTestSuite) TestGetParamsGRPC() {
 	val := s.network.Validators[0]
 
-	dp := v1.DefaultDepositParams()
-	vp := v1.DefaultVotingParams()
-	tp := v1.DefaultTallyParams()
+	params := v1.DefaultParams()
+	dp := v1.NewDepositParams(params.MinDeposit, params.MaxDepositPeriod)          //nolint:staticcheck // we use deprecated gov commands here, but we don't want to remove them
+	vp := v1.NewVotingParams(params.VotingPeriod)                                  //nolint:staticcheck // we use deprecated gov commands here, but we don't want to remove them
+	tp := v1.NewTallyParams(params.Quorum, params.Threshold, params.VetoThreshold) //nolint:staticcheck // we use deprecated gov commands here, but we don't want to remove them
 
 	testCases := []struct {
 		name       string
@@ -378,28 +377,28 @@ func (s *IntegrationTestSuite) TestGetParamsGRPC() {
 			fmt.Sprintf("%s/cosmos/gov/v1/params/%s", val.APIAddress, v1.ParamDeposit),
 			false,
 			&v1.QueryParamsResponse{},
-			&v1.QueryParamsResponse{DepositParams: &dp},
+			&v1.QueryParamsResponse{DepositParams: &dp, Params: &params},
 		},
 		{
 			"get vote params",
 			fmt.Sprintf("%s/cosmos/gov/v1/params/%s", val.APIAddress, v1.ParamVoting),
 			false,
 			&v1.QueryParamsResponse{},
-			&v1.QueryParamsResponse{VotingParams: &vp},
+			&v1.QueryParamsResponse{VotingParams: &vp, Params: &params},
 		},
 		{
 			"get tally params",
 			fmt.Sprintf("%s/cosmos/gov/v1/params/%s", val.APIAddress, v1.ParamTallying),
 			false,
 			&v1.QueryParamsResponse{},
-			&v1.QueryParamsResponse{TallyParams: &tp},
+			&v1.QueryParamsResponse{TallyParams: &tp, Params: &params},
 		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		s.Run(tc.name, func() {
-			resp, err := rest.GetRequest(tc.url)
+			resp, err := testutil.GetRequest(tc.url)
 			s.Require().NoError(err)
 
 			err = val.ClientCtx.Codec.UnmarshalJSON(resp, tc.respType)

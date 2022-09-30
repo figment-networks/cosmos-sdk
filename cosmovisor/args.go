@@ -271,7 +271,7 @@ func (cfg *Config) validate() []error {
 }
 
 // SetCurrentUpgrade sets the named upgrade to be the current link, returns error if this binary doesn't exist
-func (cfg *Config) SetCurrentUpgrade(u upgradetypes.Plan) error {
+func (cfg *Config) SetCurrentUpgrade(u upgradetypes.Plan) (rerr error) {
 	// ensure named upgrade exists
 	bin := cfg.UpgradeBin(u.Name)
 
@@ -299,14 +299,19 @@ func (cfg *Config) SetCurrentUpgrade(u upgradetypes.Plan) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		cerr := f.Close()
+		if rerr == nil {
+			rerr = cerr
+		}
+	}()
+
 	bz, err := json.Marshal(u)
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(bz); err != nil {
-		return err
-	}
-	return f.Close()
+	_, err = f.Write(bz)
+	return err
 }
 
 func (cfg *Config) UpgradeInfo() (upgradetypes.Plan, error) {
@@ -374,7 +379,7 @@ func (cfg Config) DetailString() string {
 	var sb strings.Builder
 	sb.WriteString("Configurable Values:\n")
 	for _, kv := range configEntries {
-		sb.WriteString(fmt.Sprintf("  %s: %s\n", kv.name, kv.value))
+		fmt.Fprintf(&sb, "  %s: %s\n", kv.name, kv.value)
 	}
 	sb.WriteString("Derived Values:\n")
 	dnl := 0
@@ -385,7 +390,7 @@ func (cfg Config) DetailString() string {
 	}
 	dFmt := fmt.Sprintf("  %%%ds: %%s\n", dnl)
 	for _, kv := range derivedEntries {
-		sb.WriteString(fmt.Sprintf(dFmt, kv.name, kv.value))
+		fmt.Fprintf(&sb, dFmt, kv.name, kv.value)
 	}
 	return sb.String()
 }

@@ -4,28 +4,26 @@ package simapp
 
 import (
 	_ "embed"
+	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/gorilla/mux"
-	"github.com/rakyll/statik/fs"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
-	tmos "github.com/tendermint/tendermint/libs/os"
 	dbm "github.com/tendermint/tm-db"
+
+	"cosmossdk.io/depinject"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/depinject"
 	"github.com/cosmos/cosmos-sdk/runtime"
+	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/server/api"
 	"github.com/cosmos/cosmos-sdk/server/config"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	simappparams "github.com/cosmos/cosmos-sdk/simapp/params"
 	"github.com/cosmos/cosmos-sdk/store/streaming"
 	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	"github.com/cosmos/cosmos-sdk/testutil/testdata_pulsar"
@@ -51,7 +49,6 @@ import (
 	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
 	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
 	distr "github.com/cosmos/cosmos-sdk/x/distribution"
-	distrclient "github.com/cosmos/cosmos-sdk/x/distribution/client"
 	distrkeeper "github.com/cosmos/cosmos-sdk/x/distribution/keeper"
 	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 	"github.com/cosmos/cosmos-sdk/x/evidence"
@@ -89,9 +86,6 @@ import (
 	upgradeclient "github.com/cosmos/cosmos-sdk/x/upgrade/client"
 	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
-
-	// unnamed import of statik for swagger UI support
-	_ "github.com/cosmos/cosmos-sdk/client/docs/statik"
 )
 
 var (
@@ -103,14 +97,18 @@ var (
 	// and genesis verification.
 	ModuleBasics = module.NewBasicManager(
 		auth.AppModuleBasic{},
-		genutil.AppModuleBasic{},
+		genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator),
 		bank.AppModuleBasic{},
 		capability.AppModuleBasic{},
 		staking.AppModuleBasic{},
 		mint.AppModuleBasic{},
 		distr.AppModuleBasic{},
 		gov.NewAppModuleBasic(
-			[]govclient.ProposalHandler{paramsclient.ProposalHandler, distrclient.ProposalHandler, upgradeclient.LegacyProposalHandler, upgradeclient.LegacyCancelProposalHandler},
+			[]govclient.ProposalHandler{
+				paramsclient.ProposalHandler,
+				upgradeclient.LegacyProposalHandler,
+				upgradeclient.LegacyCancelProposalHandler,
+			},
 		),
 		params.AppModuleBasic{},
 		crisis.AppModuleBasic{},
@@ -123,21 +121,10 @@ var (
 		vesting.AppModuleBasic{},
 		nftmodule.AppModuleBasic{},
 	)
-
-	// module account permissions
-	maccPerms = map[string][]string{
-		authtypes.FeeCollectorName:     nil,
-		distrtypes.ModuleName:          nil,
-		minttypes.ModuleName:           {authtypes.Minter},
-		stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
-		stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-		govtypes.ModuleName:            {authtypes.Burner},
-		nft.ModuleName:                 nil,
-	}
 )
 
 var (
-	_ App                     = (*SimApp)(nil)
+	_ runtime.AppI            = (*SimApp)(nil)
 	_ servertypes.Application = (*SimApp)(nil)
 )
 
@@ -148,6 +135,7 @@ type SimApp struct {
 	*runtime.App
 	legacyAmino       *codec.LegacyAmino
 	appCodec          codec.Codec
+	txConfig          client.TxConfig
 	interfaceRegistry codectypes.InterfaceRegistry
 
 	// keys to access the substores
@@ -186,21 +174,40 @@ func init() {
 
 // NewSimApp returns a reference to an initialized SimApp.
 func NewSimApp(
-	logger log.Logger, db dbm.DB, traceStore io.Writer, loadLatest bool, encodingConfig simappparams.EncodingConfig,
-	appOpts servertypes.AppOptions, baseAppOptions ...func(*baseapp.BaseApp),
+	logger log.Logger,
+	db dbm.DB,
+	traceStore io.Writer,
+	loadLatest bool,
+	appOpts servertypes.AppOptions,
+	baseAppOptions ...func(*baseapp.BaseApp),
 ) *SimApp {
 	var (
 		app        = &SimApp{}
 		appBuilder *runtime.AppBuilder
 
-		// merge the app.yaml and the appOpts in one config
-		appConfig = depinject.Configs(AppConfig, depinject.Supply(appOpts))
+		// merge the AppConfig and other configuration in one config
+		appConfig = depinject.Configs(
+			AppConfig,
+			depinject.Supply(
+				// supply the application options
+				appOpts,
+
+				// for providing a custom inflaction function for x/mint
+				// add here your custom function that implements the minttypes.InflationCalculationFn interface.
+
+				// for providing a custom authority to a module simply add it below. By default the governance module is the default authority.
+				// map[string]sdk.AccAddress{
+				// 	minttypes.ModuleName: authtypes.NewModuleAddress(authtypes.ModuleName),
+				// },
+			),
+		)
 	)
 
 	if err := depinject.Inject(appConfig,
 		&appBuilder,
 		&app.appCodec,
 		&app.legacyAmino,
+		&app.txConfig,
 		&app.interfaceRegistry,
 		&app.AccountKeeper,
 		&app.BankKeeper,
@@ -227,7 +234,8 @@ func NewSimApp(
 	// configure state listening capabilities using AppOptions
 	// we are doing nothing with the returned streamingServices and waitGroup in this case
 	if _, _, err := streaming.LoadStreamingServices(app.App.BaseApp, appOpts, app.appCodec, app.keys); err != nil {
-		tmos.Exit(err.Error())
+		fmt.Println(err.Error())
+		os.Exit(1)
 	}
 
 	/****  Module Options ****/
@@ -255,7 +263,6 @@ func NewSimApp(
 	// app.ModuleManager.SetOrderMigrations(custom order)
 
 	app.ModuleManager.RegisterInvariants(app.CrisisKeeper)
-	app.ModuleManager.RegisterRoutes(app.Router(), app.QueryRouter(), encodingConfig.Amino)
 
 	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
 	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
@@ -269,7 +276,7 @@ func NewSimApp(
 	// NOTE: this is not required apps that don't use the simulator for fuzz testing
 	// transactions
 	overrideModules := map[string]module.AppModuleSimulation{
-		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts),
+		authtypes.ModuleName: auth.NewAppModule(app.appCodec, app.AccountKeeper, authsims.RandomGenesisAccounts, app.GetSubspace(authtypes.ModuleName)),
 	}
 	app.sm = module.NewSimulationManagerFromAppModules(app.ModuleManager.Modules, overrideModules)
 
@@ -323,6 +330,11 @@ func (app *SimApp) InterfaceRegistry() codectypes.InterfaceRegistry {
 	return app.interfaceRegistry
 }
 
+// TxConfig returns SimApp's TxConfig
+func (app *SimApp) TxConfig() client.TxConfig {
+	return app.txConfig
+}
+
 // GetKey returns the KVStoreKey for the provided store key.
 //
 // NOTE: This is solely to be used for testing purposes.
@@ -357,29 +369,37 @@ func (app *SimApp) SimulationManager() *module.SimulationManager {
 // API server.
 func (app *SimApp) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig) {
 	app.App.RegisterAPIRoutes(apiSvr, apiConfig)
-
 	// register swagger API from root so that other applications can override easily
-	if apiConfig.Swagger {
-		RegisterSwaggerAPI(apiSvr.ClientCtx, apiSvr.Router)
-	}
-}
-
-// RegisterSwaggerAPI registers swagger route with API Server
-func RegisterSwaggerAPI(_ client.Context, rtr *mux.Router) {
-	statikFS, err := fs.New()
-	if err != nil {
+	if err := server.RegisterSwaggerAPI(apiSvr.ClientCtx, apiSvr.Router, apiConfig.Swagger); err != nil {
 		panic(err)
 	}
-
-	staticServer := http.FileServer(statikFS)
-	rtr.PathPrefix("/swagger/").Handler(http.StripPrefix("/swagger/", staticServer))
 }
 
 // GetMaccPerms returns a copy of the module account permissions
+//
+// NOTE: This is solely to be used for testing purposes.
 func GetMaccPerms() map[string][]string {
-	dupMaccPerms := make(map[string][]string)
-	for k, v := range maccPerms {
-		dupMaccPerms[k] = v
+	dup := make(map[string][]string)
+	for _, perms := range moduleAccPerms {
+		dup[perms.Account] = perms.Permissions
 	}
-	return dupMaccPerms
+
+	return dup
+}
+
+// BlockedAddresses returns all the app's blocked account addresses.
+func BlockedAddresses() map[string]bool {
+	result := make(map[string]bool)
+
+	if len(blockAccAddrs) > 0 {
+		for _, addr := range blockAccAddrs {
+			result[addr] = true
+		}
+	} else {
+		for addr := range GetMaccPerms() {
+			result[addr] = true
+		}
+	}
+
+	return result
 }

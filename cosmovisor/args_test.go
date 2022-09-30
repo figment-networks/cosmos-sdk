@@ -81,8 +81,9 @@ func (c *cosmovisorEnv) Set(envVar, envVal string) {
 
 // clearEnv clears environment variables and what they were.
 // Designed to be used like this:
-//    initialEnv := clearEnv()
-//    defer setEnv(nil, initialEnv)
+//
+//	initialEnv := clearEnv()
+//	defer setEnv(nil, initialEnv)
 func (s *argsTestSuite) clearEnv() *cosmovisorEnv {
 	s.T().Logf("Clearing environment variables.")
 	rv := cosmovisorEnv{}
@@ -142,6 +143,13 @@ func (s *argsTestSuite) TestConfigPaths() {
 			expectRoot:    fmt.Sprintf("/longer/prefix/%s", rootName),
 			expectGenesis: fmt.Sprintf("/longer/prefix/%s/genesis/bin/yourd", rootName),
 			expectUpgrade: "/longer/prefix/cosmovisor/upgrades/some%20spaces/bin/yourd",
+		},
+		"handle casing": {
+			cfg:           Config{Home: "/longer/prefix/", Name: "appd"},
+			upgradeName:   "myUpgrade",
+			expectRoot:    fmt.Sprintf("/longer/prefix/%s", rootName),
+			expectGenesis: fmt.Sprintf("/longer/prefix/%s/genesis/bin/appd", rootName),
+			expectUpgrade: "/longer/prefix/cosmovisor/upgrades/myUpgrade/bin/appd",
 		},
 	}
 
@@ -680,4 +688,30 @@ func (s *argsTestSuite) TestLogConfigOrError() {
 			}
 		})
 	}
+}
+
+var sink interface{}
+
+func BenchmarkDetailString(b *testing.B) {
+	cfg := &Config{
+		Home: "/foo", Name: "myd",
+		AllowDownloadBinaries: true,
+		UnsafeSkipBackup:      true,
+		PollInterval:          450 * time.Second,
+		PreupgradeMaxRetries:  1e7,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		sink = cfg.DetailString()
+	}
+
+	if sink == nil {
+		b.Fatal("Benchmark did not run")
+	}
+
+	// Otherwise reset the sink.
+	sink = (interface{})(nil)
 }

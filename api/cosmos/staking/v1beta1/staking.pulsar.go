@@ -7,7 +7,7 @@ import (
 	fmt "fmt"
 	_ "github.com/cosmos/cosmos-proto"
 	runtime "github.com/cosmos/cosmos-proto/runtime"
-	_ "github.com/gogo/protobuf/gogoproto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoiface "google.golang.org/protobuf/runtime/protoiface"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -12706,7 +12706,7 @@ func (x *Redelegation) GetEntries() []*RedelegationEntry {
 	return nil
 }
 
-// Params defines the parameters for the staking module.
+// Params defines the parameters for the x/staking module.
 type Params struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

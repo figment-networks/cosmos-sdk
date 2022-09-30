@@ -8,8 +8,8 @@ import (
 	_ "github.com/cosmos/cosmos-proto"
 	github_com_cosmos_cosmos_sdk_types "github.com/cosmos/cosmos-sdk/types"
 	types "github.com/cosmos/cosmos-sdk/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -327,7 +327,7 @@ var xxx_messageInfo_ValidatorSlashEventRecord proto.InternalMessageInfo
 
 // GenesisState defines the distribution module's genesis state.
 type GenesisState struct {
-	// params defines all the paramaters of the module.
+	// params defines all the parameters of the module.
 	Params Params `protobuf:"bytes,1,opt,name=params,proto3" json:"params"`
 	// fee_pool defines the fee pool at genesis.
 	FeePool FeePool `protobuf:"bytes,2,opt,name=fee_pool,json=feePool,proto3" json:"fee_pool"`

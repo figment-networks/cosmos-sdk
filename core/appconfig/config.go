@@ -2,7 +2,6 @@ package appconfig
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -14,7 +13,7 @@ import (
 
 	appv1alpha1 "cosmossdk.io/api/cosmos/app/v1alpha1"
 
-	"github.com/cosmos/cosmos-sdk/depinject"
+	"cosmossdk.io/depinject"
 
 	"cosmossdk.io/core/internal"
 )
@@ -94,14 +93,7 @@ func Compose(appConfig *appv1alpha1.Config) depinject.Config {
 			return depinject.Error(err)
 		}
 
-		opts = append(opts, depinject.Provide(depinject.ProviderDescriptor{
-			Inputs:  nil,
-			Outputs: []depinject.ProviderOutput{{Type: init.ConfigGoType}},
-			Fn: func(values []reflect.Value) ([]reflect.Value, error) {
-				return []reflect.Value{reflect.ValueOf(config)}, nil
-			},
-			Location: depinject.LocationFromCaller(0),
-		}))
+		opts = append(opts, depinject.Supply(config))
 
 		for _, provider := range init.Providers {
 			opts = append(opts, depinject.ProvideInModule(module.Name, provider))

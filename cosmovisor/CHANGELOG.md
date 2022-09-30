@@ -35,7 +35,19 @@ Ref: https://keepachangelog.com/en/1.0.0/
 # Changelog
 
 ## [Unreleased]
-<!-- NOTE: when creating a new release, update cosmovisor/cmd/cosmovisor/cmd/version.go:Version -->
+
+## v1.3.0 2022-09-11
+
+### Improvements
+
+* [#12921](https://github.com/cosmos/cosmos-sdk/pull/12918) Add documentation about expected plan path name.
+* [#12918](https://github.com/cosmos/cosmos-sdk/pull/12918) Automatically set version using module version.
+
+### Bug Fixes
+
+* [#13221](https://github.com/cosmos/cosmos-sdk/pull/13221) Fix `go install`.
+
+## v1.2.0 2022-07-26
 
 ### Features
 
@@ -44,7 +56,7 @@ Ref: https://keepachangelog.com/en/1.0.0/
 * [\#11823](https://github.com/cosmos/cosmos-sdk/pull/11823) Refactor `cosmovisor` CLI to use `cobra`.
 * [\#11731](https://github.com/cosmos/cosmos-sdk/pull/11731) `cosmovisor version -o json` returns the cosmovisor version and the result of `simd --output json --long` in one JSON object.
 
-### Bugfix
+### Bug Fixes
 
 * [\#12005](https://github.com/cosmos/cosmos-sdk/pull/12005) Fix cosmovisor binary usage for pre-upgrade
 
@@ -52,7 +64,7 @@ Ref: https://keepachangelog.com/en/1.0.0/
 
 * [\#12188](https://github.com/cosmos/cosmos-sdk/pull/12188) Remove the possibility to set a time with only a number. `DAEMON_POLL_INTERVAL` env variable now only supports a duration (e.g. `100ms`, `30s`, `20m`).
 
-## v1.1.0 2022-10-02
+## v1.1.0 2022-02-10
 
 ### Features
 

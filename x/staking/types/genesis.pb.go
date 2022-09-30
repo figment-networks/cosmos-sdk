@@ -7,8 +7,8 @@ import (
 	fmt "fmt"
 	_ "github.com/cosmos/cosmos-proto"
 	github_com_cosmos_cosmos_sdk_types "github.com/cosmos/cosmos-sdk/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -27,7 +27,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // GenesisState defines the staking module's genesis state.
 type GenesisState struct {
-	// params defines all the paramaters of related to deposit.
+	// params defines all the parameters of related to deposit.
 	Params Params `protobuf:"bytes,1,opt,name=params,proto3" json:"params"`
 	// last_total_power tracks the total amounts of bonded tokens recorded during
 	// the previous end block.
