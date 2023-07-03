@@ -15,7 +15,7 @@ require (
 	golang.org/x/exp v0.0.0-20220916125017-b168a2c6b86b
 	google.golang.org/grpc v1.49.0
 	google.golang.org/protobuf v1.28.1
-	gotest.tools/v3 v3.3.0
+	gotest.tools/v3 v3.5.0
 	pgregory.net/rapid v0.5.3
 )
 
@@ -51,7 +51,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	golang.org/x/net v0.0.0-20220726230323-06994584191e // indirect
-	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20220725144611-272f38e5d71b // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
